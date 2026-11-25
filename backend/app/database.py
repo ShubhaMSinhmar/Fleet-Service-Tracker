@@ -12,16 +12,18 @@ class Base(DeclarativeBase):
     """Every model inherits from this; Base.metadata knows all the tables."""
 
 
-# TODO 1: build connect_args.
-#   SQLite needs {"check_same_thread": False} (FastAPI may use another thread per request).
-#   Any other database needs {}.
-#   hint: settings.database_url.startswith("sqlite")
+connect_args = (
+    {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+)
 
-# TODO 2: engine = create_engine(settings.database_url, connect_args=...)
+engine = create_engine(settings.database_url, connect_args=connect_args)
 
-# TODO 3: SessionLocal = sessionmaker(bind=engine, autoflush=False)
+SessionLocal = sessionmaker(bind=engine, autoflush=False)
 
 
-# TODO 4: a FastAPI dependency that gives one session per request and always closes it.
-#   hint: create SessionLocal(), `yield` it inside try, close it in finally.
-def get_db() -> Generator[Session, None, None]: ...
+def get_db() -> Generator[Session, None, None]:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
