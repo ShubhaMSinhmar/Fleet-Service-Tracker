@@ -18,36 +18,56 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
-    # TODO: bcrypt.hashpw(password_as_bytes, bcrypt.gensalt()) returns bytes; return it as a str.
-    #   hint: .encode("utf-8") to go to bytes, .decode("utf-8") to come back.
-    ...
+    # .encode("utf-8") to go to bytes, .decode("utf-8") to come back.
+    bytes_pass = password.encode("utf-8")
+    result = bcrypt.hashpw(bytes_pass, bcrypt.gensalt())
+    decoded_pass = result.decode("utf-8")
+    return decoded_pass
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    # TODO: bcrypt.checkpw(password_bytes, hashed_bytes) -> bool
-    ...
+    password_encoded = password.encode("utf-8")
+    hashed_password_encoded = hashed_password.encode("utf-8")
+    result = bcrypt.checkpw(password_encoded, hashed_password_encoded)
+    return result
 
 
 def create_access_token(user_id: int) -> str:
-    # TODO: build a payload dict with
-    #   "sub": str(user_id)   (PyJWT requires the subject to be a STRING)
-    #   "exp": now (UTC) + timedelta(minutes=settings.access_token_expire_minutes)
-    #   then jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
-    #   hint: datetime.now(timezone.utc)
-    ...
+    payload = {
+        "sub": str(user_id),
+        "exp": datetime.now(timezone.utc)
+        + timedelta(minutes=settings.access_token_expire_minutes),
+    }
+    final_token = jwt.encode(
+        payload, settings.secret_key, algorithm=settings.jwt_algorithm
+    )
+    return final_token
 
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    # TODO: 1. If credentials is None -> raise 401.
-    #       2. Decode: jwt.decode(credentials.credentials, settings.secret_key, algorithms=[settings.jwt_algorithm])
-    #          Always pass algorithms as a LIST. Catch jwt.InvalidTokenError (covers bad signature AND expired) -> 401.
-    #       3. user_id = int(payload["sub"]); load the user with db.get(User, user_id).
-    #          If the user does not exist (deleted account) -> 401.
-    #       4. Return the user.
-    #   One 401 helper is cleaner than repeating the raise:
-    #   HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated",
-    #                 headers={"WWW-Authenticate": "Bearer"})
-    ...
+    raised_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not Authenticated!",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if credentials is None:
+        raise raised_error
+
+    try:
+        data = jwt.decode(
+            credentials.credentials,
+            settings.secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except jwt.InvalidTokenError:
+        raise raised_error
+
+    user_id = int(data["sub"])
+    user = db.get(User, user_id)
+    if user is None:
+        raise raised_error
+    else:
+        return user
